@@ -43,12 +43,8 @@ added.
 ## Target repo is compile-time hardcoded
 
 `client.ConfigGlobal.UpdateGithubOwner`/`UpdateGithubRepo` default to
-`"ao-data"`/`"albiondata-client"` (`client/config.go`). There *is* a
-viper-based override for these via `config.yaml`, but it's commented
-out in `setupWebsocketFlags()` ("Keeping for local development, but
-commenting out so it's not live") - so in a normal build there is no
-config-file or flag way to point the updater at a fork. Testing against
-a personal fork (e.g. `phendryx/albiondata-client`) currently means
-building a local binary with `UpdateGithubOwner`/`UpdateGithubRepo`
-edited directly in `client/config.go` before building - not committed,
-reverted before any real commit.
+`"pfcdev"`/`"albiondata-client-tray"` (`client/config.go`), so release
+builds update from this fork and do not replace themselves with an
+upstream `ao-data/albiondata-client` binary. The viper-based override
+for these values remains commented out in `setupWebsocketFlags()`, so
+normal builds always use the compile-time defaults.

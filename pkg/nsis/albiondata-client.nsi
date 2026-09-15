@@ -58,6 +58,8 @@ Var STARTMENU_FOLDER
 ; These indented statements modify settings for MUI_PAGE_FINISH
 ; !define MUI_FINISHPAGE_NOAUTOCLOSE
 ; !define MUI_UNFINISHPAGE_NOAUTOCLOSE
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${PACKAGE_EXE}"
+!define MUI_FINISHPAGE_RUN_TEXT "Start ${PACKAGE_NAME}"
 
 ;--------------------------------
 ;Pages
@@ -164,7 +166,9 @@ Section $(TEXT_SecBase) SecBase
   SetOutPath "$INSTDIR"
   CreateShortCut "$DESKTOP\${PACKAGE_NAME}.lnk" "$INSTDIR\${PACKAGE_EXE}"
 
-; Create Task to run the Client as Admin on Logon
+; Create Task to run the Client as Admin on Logon. Auto-start stays in
+; the tray; normal launches (including the installer finish-page launch)
+; open the dashboard.
   Exec 'c:\Windows\System32\schtasks.exe /Create /F /SC ONLOGON /RL HIGHEST /TN "Albion Data Client" /TR "\"$INSTDIR\albiondata-client.exe\" -minimize"'
 
 SectionEnd

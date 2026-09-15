@@ -236,8 +236,10 @@ func runDashboardApp() {
 
 	setupTray(app, dashboardWindow)
 
-	// Open and focus the dashboard automatically at launch. Registered as
-	// an ApplicationStarted hook rather than a bare goroutine: a plain
+	// Open and focus the dashboard automatically on normal launches. The
+	// Windows auto-start task passes -minimize, which deliberately leaves
+	// the dashboard hidden in the tray. Registered as an ApplicationStarted
+	// hook rather than a bare goroutine: a plain
 	// `go showDashboardWindow()` here would race app.Run()'s internal
 	// setup (globalApplication.impl isn't set until partway through
 	// Run(), and Show()/Focus() silently no-op if it's still nil) -
@@ -251,6 +253,10 @@ func runDashboardApp() {
 		// application.New(): SetIcon silently no-ops until app.impl is
 		// set partway through Run(), same as showDashboardWindow() below.
 		app.SetIcon(icon.TrayPNG)
+
+		if client.ConfigGlobal.Minimize {
+			return
+		}
 
 		showDashboardWindow()
 		if !dashboardWindow.IsVisible() {
@@ -283,40 +289,14 @@ func setupTray(app *application.App, dashboardWindow *application.WebviewWindow)
 	// that's nearly invisible against the menu bar.
 	tray.SetIcon(icon.TrayPNG)
 
-	// Double-clicking the tray icon opens the dashboard. This is done by
-	// hand rather than via tray.OnDoubleClick: Wails v3's macOS systray
-	// backend never wires that handler up at all (only Windows does), and
-	// on macOS a tray icon with a menu attached shows that menu on the
-	// very first mouse-down whenever no click handler is registered -
-	// which consumes the click before a second one can ever be seen as a
-	// double-click. Registering our own OnClick suppresses that
-	// auto-show-on-first-click behavior, so we do the single/double-click
-	// disambiguation ourselves: a click starts a short timer that opens
-	// the menu if nothing follows, or is cancelled and treated as a
-	// double-click if a second one arrives first.
-	const trayDoubleClickWindow = 400 * time.Millisecond
-	var (
-		trayClickMu      sync.Mutex
-		trayPendingClick *time.Timer
-	)
+	// A left click always restores and focuses the dashboard. Right-click
+	// opens the menu independently for Open Dashboard, Open Log File, and
+	// Exit.
 	tray.OnClick(func() {
-		trayClickMu.Lock()
-		defer trayClickMu.Unlock()
-
-		if trayPendingClick != nil {
-			trayPendingClick.Stop()
-			trayPendingClick = nil
-			dashboardWindow.Show()
-			dashboardWindow.Focus()
-			return
-		}
-
-		trayPendingClick = time.AfterFunc(trayDoubleClickWindow, func() {
-			trayClickMu.Lock()
-			trayPendingClick = nil
-			trayClickMu.Unlock()
-			tray.ShowMenu()
-		})
+		showDashboardWindow()
+	})
+	tray.OnRightClick(func() {
+		tray.ShowMenu()
 	})
 
 	menu := app.NewMenu()
@@ -350,7 +330,7 @@ func setupTray(app *application.App, dashboardWindow *application.WebviewWindow)
 	}
 
 	menu.AddSeparator()
-	menu.Add("Quit").OnClick(func(ctx *application.Context) {
+	menu.Add("Exit").OnClick(func(ctx *application.Context) {
 		app.Quit()
 	})
 

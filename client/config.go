@@ -74,8 +74,8 @@ type config struct {
 // config global config data
 var ConfigGlobal = &config{
 	LogLevel:          "INFO",
-	UpdateGithubOwner: "ao-data",
-	UpdateGithubRepo:  "albiondata-client"}
+	UpdateGithubOwner: "pfcdev",
+	UpdateGithubRepo:  "albiondata-client-tray"}
 
 func (config *config) SetupFlags() {
 	config.setupWebsocketFlags()

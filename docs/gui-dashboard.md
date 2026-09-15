@@ -124,13 +124,8 @@ per-OS-per-arch design.
 - `internal/winstate` (cross-platform) - window position/size
   persistence to `os.UserConfigDir()/albiondata-client/window.json`,
   debounced 500ms after move/resize.
-- Tray double-click (`albiondata-client.go`, `setupTray`) is hand-rolled
-  via `tray.OnClick` + a 400ms timer, not `tray.OnDoubleClick`. Wails
-  v3's macOS systray backend never wires up a native double-click
-  handler (only the Windows backend does - check
-  `vendor/.../wails/v3/pkg/application/systemtray_*.go`'s
-  `doubleClickHandler` if this ever needs revisiting after a Wails
-  upgrade), and a tray icon with a menu attached shows that menu on the
-  very first mouse-down when no click handler is registered at all -
-  registering `OnClick` suppresses that, then the single/double click
-  disambiguation is done by hand.
+- A normal launch opens the dashboard. The Windows logon task launches
+  with `-minimize`, which keeps the dashboard hidden in the tray. Closing
+  the dashboard hides it without stopping packet capture; left-clicking
+  the tray icon restores and focuses it, while right-clicking opens the
+  tray menu (including `Exit`).
