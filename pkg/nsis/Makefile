@@ -1,15 +1,16 @@
 TOP_SRCDIR = ../..
 PACKAGE = albiondata-client
 PACKAGE_NAME = Albion Data Client
-PACKAGE_BUGREPORT = https://github.com/ao-data/albiondata-client/issues
+PACKAGE_BUGREPORT = https://github.com/pfcdev/albiondata-client-tray/issues
 INSTALLER_COMPRESSION = lzma
 PACKAGE_EXE = albiondata-client.exe
+RELEASE_VERSION ?= $(GITHUB_REF_NAME)
 
 all: nsis
 
 nsis:
-	set -e; if echo "${GITHUB_REF_NAME}" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+$$'; then \
-		export VERSION=$$(echo "${GITHUB_REF_NAME}" | sed 's/^v//'); \
+	set -e; if echo "$(RELEASE_VERSION)" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		export VERSION=$$(echo "$(RELEASE_VERSION)" | sed 's/^v//'); \
 	else \
 		export VERSION="0.0.1"; \
 	fi; \

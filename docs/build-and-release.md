@@ -65,14 +65,19 @@ with a plain `go build` on Apple Silicon without these flags, it'll be
 a native arm64 binary that behaves differently from what's actually
 shipped - see self-update.md for a concrete way this bites.
 
-## CI: one reusable workflow, three callers
+## CI: one reusable workflow, two callers
 
 `.github/workflows/build.yml` is a `workflow_call` reusable workflow: a
 matrix over `{linux, windows, darwin}`, each leg just running `make
 build-<os>` and uploading whatever that produces as a workflow
 artifact. `test-build.yml` (push/PR) and `release.yml` (on a GitHub
 release being created) both call it - `release.yml` adds a `publish`
-job that downloads the artifacts and attaches them to the release.
+job that downloads the artifacts and attaches them to the release. The
+release workflow also supports a manual dispatch with an existing tag,
+so a failed or missed release event can be rebuilt without creating a
+new version. Its version input is passed to the reusable workflow as
+`RELEASE_VERSION`; ordinary push/PR builds fall back to
+`GITHUB_REF_NAME`.
 
 This exists because the three build paths used to be duplicated almost
 verbatim across two workflow files, and drifted: a fix to
@@ -98,7 +103,8 @@ the name.
   `rsrc_windows_*.syso` which `go build` then picks up automatically.
   Those `.syso` files are gitignored, not committed.
 - The NSIS installer (`pkg/nsis/`) derives its version from
-  `$GITHUB_REF_NAME`, but only when it looks like a real tag
+  `$RELEASE_VERSION` (falling back to `$GITHUB_REF_NAME`), but only when
+  it looks like a real tag
   (`^v?[0-9]+\.[0-9]+\.[0-9]+$`) - falls back to `"0.0.1"` otherwise.
   This matters because `GITHUB_REF_NAME` on a `pull_request`-triggered
   build is the merge ref (e.g. `5/merge`), not a version, and NSIS's

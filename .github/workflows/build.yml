@@ -7,11 +7,18 @@
 
 on:
   workflow_call:
+    inputs:
+      version:
+        description: Version embedded in release binaries
+        required: false
+        type: string
 
 jobs:
   build:
     name: Build ${{ matrix.os }}
     runs-on: ${{ matrix.runner }}
+    env:
+      RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
     strategy:
       fail-fast: false
       matrix:
