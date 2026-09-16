@@ -106,13 +106,15 @@ per-OS-per-arch design.
 
 ## Platform-specific pieces
 
-- `internal/console` (Windows only) - hides the console window on
-  launch, with a tray toggle to reveal it. `console_other.go` is a
-  no-op stub for the other platforms - this Check/no-op-stub split
-  (one real implementation behind a build tag, one empty one without
-  it) is the pattern to follow for any new OS-specific dashboard
-  behavior; `internal/dockicon` and `internal/pcapdriver` use the same
-  shape.
+- Windows release builds use the GUI subsystem, so the normal tray app
+  never opens a CMD window. `Open Console` in the tray menu starts a
+  separate helper process of the same executable, which allocates a
+  console and follows the log file. Closing it leaves packet capture
+  and the tray running. Opening the dashboard closes the helper first;
+  opening the console hides the dashboard. `Open Log File` uses the
+  desktop file handler directly. `internal/dockicon` and
+  `internal/pcapdriver` are examples of the platform-specific
+  implementation/no-op stub pattern.
 - `internal/dockicon` (macOS only) - shows the Dock icon once the
   dashboard window is first shown. Deliberately one-directional: it
   does not hide the icon again when the window is hidden. A bidirectional
@@ -123,9 +125,14 @@ per-OS-per-arch design.
   without a way to test it live against one.
 - `internal/winstate` (cross-platform) - window position/size
   persistence to `os.UserConfigDir()/albiondata-client/window.json`,
-  debounced 500ms after move/resize.
+  debounced 500ms after move/resize. Hidden/minimised and implausibly
+  small Windows bounds are not saved or restored.
 - A normal launch opens the dashboard. The Windows logon task launches
   with `-minimize`, which keeps the dashboard hidden in the tray. Closing
   the dashboard hides it without stopping packet capture; left-clicking
   the tray icon restores and focuses it, while right-clicking opens the
-  tray menu (including `Exit`).
+  tray menu (including `Exit`). The Windows startup toggle in the
+  sidebar enables or disables that scheduled task; changing it from a
+  non-elevated launch prompts for UAC consent. Installer upgrades leave
+  an existing task untouched, preserving its enabled/disabled choice
+  without prompting for the account password.

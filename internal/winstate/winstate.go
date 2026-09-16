@@ -20,6 +20,13 @@ type Bounds struct {
 	Height int `json:"height"`
 }
 
+// Valid rejects the tiny, off-screen rectangle Windows reports while a
+// window is minimised. Such bounds should never replace the last normal
+// window position or be restored at the next launch.
+func (b Bounds) Valid() bool {
+	return b.Width >= 500 && b.Height >= 350 && b.X > -30000 && b.Y > -30000
+}
+
 func filePath() (string, error) {
 	dir, err := userConfigDir()
 	if err != nil {
@@ -46,7 +53,7 @@ func Load() (Bounds, bool) {
 	if err := json.Unmarshal(data, &b); err != nil {
 		return Bounds{}, false
 	}
-	if b.Width <= 0 || b.Height <= 0 {
+	if !b.Valid() {
 		return Bounds{}, false
 	}
 	return b, true

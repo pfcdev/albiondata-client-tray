@@ -166,10 +166,16 @@ Section $(TEXT_SecBase) SecBase
   SetOutPath "$INSTDIR"
   CreateShortCut "$DESKTOP\${PACKAGE_NAME}.lnk" "$INSTDIR\${PACKAGE_EXE}"
 
-; Create Task to run the Client as Admin on Logon. Auto-start stays in
-; the tray; normal launches (including the installer finish-page launch)
-; open the dashboard.
-  Exec 'c:\Windows\System32\schtasks.exe /Create /F /SC ONLOGON /RL HIGHEST /TN "Albion Data Client" /TR "\"$INSTDIR\albiondata-client.exe\" -minimize"'
+; Keep the user's enabled/disabled startup choice on upgrades. Changing an
+; existing task's /TR can prompt for the account password and block setup.
+; The normal upgrade keeps the same install directory and executable path,
+; so leave the existing task untouched. Only create it on a fresh install.
+  nsExec::ExecToStack '"$SYSDIR\schtasks.exe" /Query /TN "Albion Data Client"'
+  Pop $0
+  Pop $1
+  StrCmp $0 "0" task_done
+    ExecWait '"$SYSDIR\schtasks.exe" /Create /F /SC ONLOGON /RL HIGHEST /TN "Albion Data Client" /TR "\"$INSTDIR\albiondata-client.exe\" -minimize"'
+task_done:
 
 SectionEnd
 

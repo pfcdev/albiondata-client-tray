@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/ao-data/albiondata-client/client"
 	"github.com/ao-data/albiondata-client/icon"
-	"github.com/ao-data/albiondata-client/internal/console"
+	"github.com/ao-data/albiondata-client/internal/consoleviewer"
 	"github.com/ao-data/albiondata-client/internal/dashboard"
 	"github.com/ao-data/albiondata-client/internal/dockicon"
 	"github.com/ao-data/albiondata-client/internal/pcapdriver"
@@ -33,12 +34,16 @@ var version string
 var (
 	dashboardWindowMu  sync.Mutex
 	dashboardWindowRef *application.WebviewWindow
+	consoleViewerMu    sync.Mutex
+	consoleViewerCmd   *exec.Cmd
+	consoleViewerInput io.WriteCloser
 )
 
 // showDashboardWindow shows the dashboard window if it has been created
 // yet. It is a no-op if runDashboardApp() hasn't gotten there yet, which
 // can happen if capture fails very early in startup.
 func showDashboardWindow() {
+	closeConsoleViewer()
 	dashboardWindowMu.Lock()
 	w := dashboardWindowRef
 	dashboardWindowMu.Unlock()
@@ -55,10 +60,62 @@ func showDashboardWindow() {
 	}
 }
 
+func closeConsoleViewer() {
+	consoleViewerMu.Lock()
+	input := consoleViewerInput
+	consoleViewerCmd = nil
+	consoleViewerInput = nil
+	consoleViewerMu.Unlock()
+	if input != nil {
+		_ = input.Close()
+	}
+}
+
+// showConsoleViewer starts a separate process for the optional live log
+// console. Its close button can only terminate that viewer, not the tray app.
+func showConsoleViewer() error {
+	closeConsoleViewer()
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(exe, "--console-viewer", client.GetLogFilePath())
+	input, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		_ = input.Close()
+		return err
+	}
+	consoleViewerMu.Lock()
+	consoleViewerCmd = cmd
+	consoleViewerInput = input
+	consoleViewerMu.Unlock()
+	go func() {
+		_ = cmd.Wait()
+		consoleViewerMu.Lock()
+		if consoleViewerCmd == cmd {
+			consoleViewerCmd = nil
+			consoleViewerInput = nil
+			_ = input.Close()
+		}
+		consoleViewerMu.Unlock()
+	}()
+	return nil
+}
+
+func isConsoleViewer() bool {
+	return len(os.Args) == 3 && os.Args[1] == "--console-viewer"
+}
+
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func init() {
+	if isConsoleViewer() {
+		return
+	}
 	client.ConfigGlobal.SetupFlags()
 	application.RegisterEvent[dashboard.Status]("status:changed")
 	application.RegisterEvent[map[string]int64]("counters:snapshot")
@@ -66,13 +123,11 @@ func init() {
 }
 
 func main() {
-	// Hide the console immediately, before any other startup work, so
-	// nothing flashes on screen before it disappears. Only when launched
-	// with no arguments — any flag (e.g. -version, -h) means the user is
-	// running this from a terminal and expects to see output, so leave
-	// the console visible in that case.
-	if runtime.GOOS == "windows" && len(os.Args) == 1 && console.Owned() {
-		console.Hide()
+	if isConsoleViewer() {
+		if err := consoleviewer.Run(os.Args[2], os.Stdin); err != nil {
+			os.Exit(1)
+		}
+		return
 	}
 
 	if client.ConfigGlobal.PrintVersion {
@@ -82,12 +137,8 @@ func main() {
 
 	log.AddHook(dashboard.NewLogHook())
 
-	// Delayed rather than called inline here: this early in startup it'd
-	// print before Wails' own boot noise (Build Info/AssetServer Info/
-	// Platform Info/WebView2 environment lines, all logged during
-	// runDashboardApp() below), landing at the very top of the console
-	// where it's easy to miss. Waiting lets it land after that settles,
-	// closer to the bottom where a user's eye actually lands.
+	// Delay the driver check until Wails has initialized so its warning
+	// appears near the recent startup lines in the dashboard log tail.
 	go func() {
 		time.Sleep(3 * time.Second)
 		checkCaptureDriver()
@@ -143,6 +194,7 @@ func runDashboardApp() {
 	app := application.New(application.Options{
 		Name:        "Albion Data Client",
 		Description: "Live status dashboard for the Albion Data Client",
+		OnShutdown:  closeConsoleViewer,
 		Services: []application.Service{
 			application.NewService(&dashboard.DashboardService{}),
 		},
@@ -155,12 +207,14 @@ func runDashboardApp() {
 	})
 
 	winOpts := application.WebviewWindowOptions{
-		Title:  "Albion Data Client",
-		Name:   "dashboard",
-		Width:  900,
-		Height: 600,
-		Hidden: true,
-		URL:    "/",
+		Title:     "Albion Data Client",
+		Name:      "dashboard",
+		Width:     900,
+		Height:    600,
+		MinWidth:  500,
+		MinHeight: 350,
+		Hidden:    true,
+		URL:       "/",
 	}
 	if saved, ok := winstate.Load(); ok {
 		winOpts.Width = saved.Width
@@ -211,8 +265,15 @@ func runDashboardApp() {
 			saveBoundsTimer.Stop()
 		}
 		saveBoundsTimer = time.AfterFunc(500*time.Millisecond, func() {
+			if !dashboardWindow.IsVisible() || dashboardWindow.IsMinimised() {
+				return
+			}
 			b := dashboardWindow.Bounds()
-			if err := winstate.Save(winstate.Bounds{X: b.X, Y: b.Y, Width: b.Width, Height: b.Height}); err != nil {
+			bounds := winstate.Bounds{X: b.X, Y: b.Y, Width: b.Width, Height: b.Height}
+			if !bounds.Valid() {
+				return
+			}
+			if err := winstate.Save(bounds); err != nil {
 				log.Error(err)
 			}
 		})
@@ -290,8 +351,7 @@ func setupTray(app *application.App, dashboardWindow *application.WebviewWindow)
 	tray.SetIcon(icon.TrayPNG)
 
 	// A left click always restores and focuses the dashboard. Right-click
-	// opens the menu independently for Open Dashboard, Open Log File, and
-	// Exit.
+	// opens the menu independently for the GUI, log console, and exit.
 	tray.OnClick(func() {
 		showDashboardWindow()
 	})
@@ -301,33 +361,20 @@ func setupTray(app *application.App, dashboardWindow *application.WebviewWindow)
 
 	menu := app.NewMenu()
 	menu.Add("Open Dashboard").OnClick(func(ctx *application.Context) {
-		// Show() alone doesn't activate the app on macOS (see
-		// showDashboardWindow's comment); Focus() does, so the window
-		// actually comes to the front instead of staying hidden behind
-		// whatever app currently has focus.
-		dashboardWindow.Show()
-		dashboardWindow.Focus()
+		showDashboardWindow()
 	})
-	menu.Add("Open Log File").OnClick(func(ctx *application.Context) {
-		openLogFile()
-	})
-
-	if console.Supported() {
-		consoleLabel := "Show Console"
-		if !console.Hidden() {
-			consoleLabel = "Hide Console"
-		}
-		menu.Add(consoleLabel).OnClick(func(ctx *application.Context) {
-			item := ctx.ClickedMenuItem()
-			if console.Hidden() {
-				console.Show()
-				item.SetLabel("Hide Console")
-			} else {
-				console.Hide()
-				item.SetLabel("Show Console")
+	if runtime.GOOS == "windows" {
+		menu.Add("Open Console").OnClick(func(ctx *application.Context) {
+			if err := showConsoleViewer(); err != nil {
+				log.Errorf("Failed to open console: %v", err)
+				return
 			}
+			dashboardWindow.Hide()
 		})
 	}
+	menu.Add("Open Log File").OnClick(func(ctx *application.Context) {
+		openLogFile(app)
+	})
 
 	menu.AddSeparator()
 	menu.Add("Exit").OnClick(func(ctx *application.Context) {
@@ -337,24 +384,14 @@ func setupTray(app *application.App, dashboardWindow *application.WebviewWindow)
 	tray.SetMenu(menu)
 }
 
-func openLogFile() {
+func openLogFile(app *application.App) {
 	path := client.GetLogFilePath()
 	if _, err := os.Stat(path); err != nil {
 		log.Info("No log file found yet.")
 		return
 	}
 
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", path)
-	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", "", path)
-	default:
-		cmd = exec.Command("xdg-open", path)
-	}
-
-	if err := cmd.Start(); err != nil {
+	if err := app.Browser.OpenFile(path); err != nil {
 		log.Errorf("Failed to open log file: %v", err)
 	}
 }

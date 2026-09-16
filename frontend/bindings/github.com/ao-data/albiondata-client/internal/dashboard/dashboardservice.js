@@ -29,6 +29,14 @@ export function GetRecentLogs() {
 }
 
 /**
+ * GetStartupEnabled reports whether the logon task is enabled.
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function GetStartupEnabled() {
+    return $Call.ByID(927544449);
+}
+
+/**
  * GetStatus returns the current status snapshot.
  * @returns {$CancellablePromise<$models.Status>}
  */
@@ -46,6 +54,24 @@ export function GetUploadCounts() {
     return $Call.ByID(1683242014).then(/** @type {($result: any) => any} */(($result) => {
         return $$createType3($result);
     }));
+}
+
+/**
+ * SetStartupEnabled changes the logon task, prompting for UAC consent if
+ * the app was launched without administrator privileges.
+ * @param {boolean} enabled
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function SetStartupEnabled(enabled) {
+    return $Call.ByID(1663975629, enabled);
+}
+
+/**
+ * StartupSupported reports whether the Windows logon task is available.
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function StartupSupported() {
+    return $Call.ByID(2743038392);
 }
 
 // Private type creation functions

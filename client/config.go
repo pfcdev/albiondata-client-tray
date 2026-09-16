@@ -262,17 +262,29 @@ func (config *config) setupLogs() {
 	// Rotate existing log files before creating new one
 	rotateLogFiles()
 
-	// Always log to both file and terminal
-	// Use colors for terminal, strip ANSI codes for file
+	// Windows GUI builds have no console/standard output. Keep file logging
+	// independent of a terminal so tray launches still retain diagnostics.
+	// When started from a terminal, mirror the same lines there as well.
 	log.SetFormatter(&logrus.TextFormatter{FullTimestamp: true, DisableSorting: true, ForceColors: true})
+	var terminalOutput io.Writer
+	if _, err := os.Stdout.Stat(); err == nil {
+		terminalOutput = colorable.NewColorableStdout()
+	}
 	f, err := os.OpenFile(logFileName, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644)
 	if err == nil {
 		// Wrap file writer to strip ANSI codes
 		strippedFileWriter := newAnsiStripWriter(f)
-		multiWriter := io.MultiWriter(colorable.NewColorableStdout(), strippedFileWriter)
-		log.SetOutput(multiWriter)
+		if terminalOutput != nil {
+			log.SetOutput(io.MultiWriter(strippedFileWriter, terminalOutput))
+		} else {
+			log.SetOutput(strippedFileWriter)
+		}
 	} else {
-		log.SetOutput(colorable.NewColorableStdout())
+		if terminalOutput != nil {
+			log.SetOutput(terminalOutput)
+		} else {
+			log.SetOutput(io.Discard)
+		}
 		log.Warnf("Could not create log file: %v", err)
 	}
 }

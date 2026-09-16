@@ -77,6 +77,33 @@
         : 'Encrypted?'
   );
 
+  let startupSupported = $state(false);
+  let startupEnabled = $state(false);
+  let startupBusy = $state(false);
+  let startupError = $state('');
+
+  DashboardService.StartupSupported().then((supported) => {
+    startupSupported = supported;
+    if (supported) {
+      DashboardService.GetStartupEnabled()
+        .then((enabled) => (startupEnabled = enabled))
+        .catch((err) => (startupError = String(err)));
+    }
+  });
+
+  async function toggleStartup() {
+    if (startupBusy) return;
+    startupBusy = true;
+    startupError = '';
+    try {
+      startupEnabled = await DashboardService.SetStartupEnabled(!startupEnabled);
+    } catch (err) {
+      startupError = String(err);
+    } finally {
+      startupBusy = false;
+    }
+  }
+
   function openDriverHelp(e) {
     e.preventDefault();
     Browser.OpenURL(status.DriverHelpURL);
@@ -137,6 +164,29 @@
   {/if}
 
   <CountersPanel />
+
+  {#if startupSupported}
+    <div class="group startup-group">
+      <div class="startup-row">
+        <div class="startup-copy">
+          <span class="label">Windows startup</span>
+          <span class="startup-help">Start in the tray when you sign in</span>
+        </div>
+        <button
+          type="button"
+          class="startup-toggle"
+          class:enabled={startupEnabled}
+          aria-pressed={startupEnabled}
+          aria-label="Start Albion Data Client with Windows"
+          disabled={startupBusy}
+          onclick={toggleStartup}
+        >{startupBusy ? '...' : startupEnabled ? 'On' : 'Off'}</button>
+      </div>
+      {#if startupError}
+        <p class="startup-error">{startupError}</p>
+      {/if}
+    </div>
+  {/if}
 
   {#if status.UpdateAvailable}
     <div class="group update-group">
@@ -211,6 +261,50 @@
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
+  }
+  .startup-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  .startup-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+  }
+  .startup-help {
+    color: var(--text-muted);
+    font-size: 0.73rem;
+    line-height: 1.35;
+  }
+  .startup-toggle {
+    flex-shrink: 0;
+    min-width: 3.1rem;
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--bg-sunken);
+    color: var(--text-muted);
+    font: 600 0.73rem var(--font-mono);
+    cursor: pointer;
+  }
+  .startup-toggle.enabled {
+    border-color: var(--blue);
+    background: var(--blue-soft);
+    color: var(--blue-bright);
+  }
+  .startup-toggle:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
+  .startup-error {
+    margin: 0;
+    color: var(--ember);
+    font-size: 0.72rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
   }
   .label {
     font-size: 0.66rem;

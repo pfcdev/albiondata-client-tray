@@ -68,3 +68,21 @@ func TestLoad_RejectsZeroSizedBounds(t *testing.T) {
 		t.Fatalf("expected Load to reject zero-sized bounds")
 	}
 }
+
+func TestLoad_RejectsMinimisedWindowsBounds(t *testing.T) {
+	withTempConfigDir(t)
+
+	if err := Save(Bounds{X: -32000, Y: -32000, Width: 160, Height: 39}); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	if _, ok := Load(); ok {
+		t.Fatal("expected Load to reject minimised window bounds")
+	}
+}
+
+func TestBoundsValid_AcceptsNegativeMultiMonitorCoordinates(t *testing.T) {
+	if !(Bounds{X: -1200, Y: -100, Width: 900, Height: 600}).Valid() {
+		t.Fatal("valid position on a secondary monitor was rejected")
+	}
+}

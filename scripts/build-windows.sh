@@ -20,7 +20,7 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 go-winres make
 
 (cd frontend && npm ci && npm run build)
-env GOOS=windows GOARCH=amd64 go build -ldflags "-s -w -X main.version=$releaseVersion" -o albiondata-client.exe albiondata-client.go
+env GOOS=windows GOARCH=amd64 go build -ldflags "-H=windowsgui -s -w -X main.version=$releaseVersion" -o albiondata-client.exe albiondata-client.go
 
 go-winres patch albiondata-client.exe
 

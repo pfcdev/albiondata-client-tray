@@ -102,6 +102,10 @@ the name.
   (`winres/winres.json`) at build time, regenerating
   `rsrc_windows_*.syso` which `go build` then picks up automatically.
   Those `.syso` files are gitignored, not committed.
+- The Windows binary is linked with `-H=windowsgui`: Task Scheduler and
+  normal launches do not create a console window. Diagnostics still go
+  to the log file and dashboard; do not remove this flag from release
+  builds or the logon task will show a CMD window again.
 - The NSIS installer (`pkg/nsis/`) derives its version from
   `$RELEASE_VERSION` (falling back to `$GITHUB_REF_NAME`), but only when
   it looks like a real tag
